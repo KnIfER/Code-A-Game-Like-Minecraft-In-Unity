@@ -63,7 +63,7 @@
 					clip(col.a - 1);
 					col = lerp(col, float4(0, 0, 0, 1), shade);
 
-					return col;
+					return col;// float4(0, 0, 1, 1);
 
 				}
 

@@ -25,8 +25,8 @@ MonoBehaviour:
   majorFloraPlacementScale: 15
   majorFloraPlacementThreshold: 0.8
   placeMajorFlora: 1
-  majorFloraMaxTreeHeight: 12
-  majorFloraMinTreeHeight: 5
+  maxHeight: 7
+  minHeight: 6
   lodes:
   - nodeName: Dirt
     blockID: 5

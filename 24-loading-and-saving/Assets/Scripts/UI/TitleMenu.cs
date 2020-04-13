@@ -7,7 +7,6 @@ using System.IO;
 using UnityEngine.SceneManagement;
 
 public class TitleMenu : MonoBehaviour {
-
     public GameObject mainMenuObject;
     public GameObject settingsObject;
 
@@ -27,36 +26,27 @@ public class TitleMenu : MonoBehaviour {
     Settings settings;
 
     private void Awake() {
-        
         if (!File.Exists(Application.dataPath + "/settings.cfg")) {
-
             Debug.Log("No settings file found, creating new one.");
 
             settings = new Settings();
             string jsonExport = JsonUtility.ToJson(settings);
             File.WriteAllText(Application.dataPath + "/settings.cfg", jsonExport);
-
         } else {
-
             Debug.Log("Settings file found, loading settings.");
 
             string jsonImport = File.ReadAllText(Application.dataPath + "/settings.cfg");
             settings = JsonUtility.FromJson<Settings>(jsonImport);
-
         }
-
     }
 
     public void StartGame() {
-
-        VoxelData.seed = Mathf.Abs(seedField.text.GetHashCode()) / VoxelData.WorldSizeInChunks;
+        VoxelData.seed = Mathf.Abs(seedField.text.GetHashCode());
         SceneManager.LoadScene("main", LoadSceneMode.Single);
-
     }
 
     public void EnterSettings() {
-
-        viewDstSlider.value = settings.viewDistance;
+        viewDstSlider.value = settings.GridSize;
         UpdateViewDstSlider();
         mouseSlider.value = settings.mouseSensitivity;
         UpdateMouseSlider();
@@ -66,12 +56,10 @@ public class TitleMenu : MonoBehaviour {
 
         mainMenuObject.SetActive(false);
         settingsObject.SetActive(true);
-
     }
 
     public void LeaveSettings () {
-
-        settings.viewDistance = (int)viewDstSlider.value;
+        settings.GridSize = (int)viewDstSlider.value;
         settings.mouseSensitivity = mouseSlider.value;
         settings.enableThreading = threadingToggle.isOn;
         settings.enableAnimatedChunks = chunkAnimToggle.isOn;
@@ -82,13 +70,10 @@ public class TitleMenu : MonoBehaviour {
 
         mainMenuObject.SetActive(true);
         settingsObject.SetActive(false);
-
     }
 
     public void QuitGame() {
-
         Application.Quit();
-
     }
 
     public void UpdateViewDstSlider () {
@@ -96,8 +81,6 @@ public class TitleMenu : MonoBehaviour {
     }
 
     public void UpdateMouseSlider () {
-
         mouseTxtSlider.text = "Mouse Sensitivity: " + mouseSlider.value.ToString("F1");
     }
-
 }

@@ -5,117 +5,156 @@ using UnityEngine;
 [HideInInspector]
 [System.Serializable]
 public class WorldData {
-
     public string worldName = "Prototype"; // Will be set by player eventually.
     public int seed;
-    [System.NonSerialized]
-    public Dictionary<Vector2Int, ChunkData> chunks = new Dictionary<Vector2Int, ChunkData>();
+    //Illeagal Usage
+    //[System.NonSerialized]
+    //public Dictionary<Vector2Int, ChunkData> chunks = new Dictionary<Vector2Int, ChunkData>();
 
     [System.NonSerialized]
     public List<ChunkData> modifiedChunks = new List<ChunkData>();
 
     public WorldData (string _worldName, int _seed) {
-
         worldName = _worldName;
         seed = _seed;
-
     }
 
     public WorldData (WorldData wD) {
-
         worldName = wD.worldName;
         seed = wD.seed;
-
     }
 
-    public ChunkData RequestChunk(Vector2Int coord, bool create) {
+    /** Hold peripheral data that could be replaced at any time. Check existing chunkdatas before do actual loading. Should avoid memory peak*/
+    public Dictionary<ChunkCoord, ChunkData> PeripheralChunkDataDict = new Dictionary<ChunkCoord, ChunkData>();
+    public List<ChunkData> PeripheralChunkDatas = new List<ChunkData>();
+    public int PeripheralLoadingCapacity = VoxelData.ChunkWidth*4;
+    public int PeripheralCapacity = VoxelData.ChunkWidth*4;//(int)(VoxelData.ChunkWidth*VoxelData.ChunkWidth*1.25);
 
-        ChunkData c;
+    public int count = 0;
 
-        lock (World.Instance.ChunkListThreadLock) {
+    /** Request A Chunk At coord position, by either creating or retrieving a ChunkData Structure to be later popu*/
+    public ChunkData RequestChunk(ChunkCoord coord, bool create, bool fillInToChunk) {
+        count++;
+        //Debug.Log("RequestChunk @ " + coord.x+", "+ coord.z);
+        ChunkData c=null;
 
-            if (chunks.ContainsKey(coord)) // If chunk is there, return it.
-                c = chunks[coord];
+        //if(!coord.EqualCoords(1, 1)) return null;
 
-            else if (!create) // If it's not and we haven't asked it to be created, return null.
-                c = null;
+        //todo keep a track of all ChunkDatas.
 
-            else { // If it's not and we asked it to be created, create the chunk then return it.
-                LoadChunk(coord);
-                c = chunks[coord];
+        //lock (World.Instance.ChunkListThreadLock) {
+            if (!fillInToChunk)
+            {
+                World.Instance.chunkDict.TryGetValue(coord, out Chunk chunk);
+                if(chunk!=null) c = chunk.getFilledData();
+                if (c != null) return c;
             }
+            
+            lock (this)
+            {
+                PeripheralChunkDataDict.TryGetValue(coord, out c);
+            }
+            //if(c==null) Debug.Log("Not !!! Found Active Chunk @ " + coord.x+", "+ coord.z);
+            if (c != null) {
+                if (fillInToChunk)
+                {
+                    lock (this)
+                    {
+                        PeripheralChunkDataDict.Remove(coord);
+                        PeripheralChunkDatas.Remove(c);
+                    }
+                }
+                return c;
+            }
+            
+            if (create)
+            { // LoadChunk
+              // If not, we check if it is saved and if yes, get the data from there.
+              //c = SaveSystem.LoadChunk(worldName, coord);
+              //if (c != null) {
+              //    chunks.Add(coord, c);
+              //    return c;
+              //}
 
-        }
+            // If not, add it to the list and populate it's voxels.
 
+                if (PeripheralChunkDatas.Count > (fillInToChunk?PeripheralLoadingCapacity:PeripheralCapacity))
+                {
+                    lock (this)
+                    {
+                        c = PeripheralChunkDatas[0];
+                        PeripheralChunkDatas.RemoveAt(0);
+                        PeripheralChunkDataDict.Remove(c.getCoord());
+                        c.RepositionData(coord);
+                    }
+                } else {
+                    c = new ChunkData(coord);
+                }
+
+                if (!fillInToChunk)
+                {
+                    lock (this)
+                    {
+                        if(!PeripheralChunkDatas.Contains(c))
+                            PeripheralChunkDatas.Add(c);
+                        if(!PeripheralChunkDataDict.ContainsKey(coord))
+                            PeripheralChunkDataDict.Add(coord, c);
+                    }
+                }
+
+                //if(!Chunk.Repositioned)
+                c.Populate();
+                return c;
+            }
+        //}
         return c;
     }
 
-    public void LoadChunk (Vector2Int coord) {
-
-        // If the chunk is already loaded we don't need to do anything.
-        if (chunks.ContainsKey(coord))
-            return;
-
-        // If not, we check if it is saved and if yes, get the data from there.
-        ChunkData chunk = SaveSystem.LoadChunk(worldName, coord);
-        if (chunk != null) {
-            chunks.Add(coord, chunk);
-            return;
-        }
-
-        // If not, add it to the list and populate it's voxels.
-        chunks.Add(coord, new ChunkData(coord));
-        chunks[coord].Populate();
-       
-    }
-
     public bool IsVoxelInWorld (Vector3 pos) {
-
-        if (pos.x >= 0 && pos.x < VoxelData.WorldSizeInVoxels && pos.y >= 0 && pos.y < VoxelData.ChunkHeight && pos.z >= 0 && pos.z < VoxelData.WorldSizeInVoxels)
+        if (pos.y >= 0 && pos.y < VoxelData.ChunkHeight)
             return true;
         else
             return false;
-
     }
 
     public void AddToModifiedChunkList(ChunkData chunk) {
-
+        //todo optimise
         // Only add to list if ChunkData is not already in the list.
         if (!modifiedChunks.Contains(chunk))
             modifiedChunks.Add(chunk);
-
     }
 
     public void SetVoxel (Vector3 pos, byte value) {
-
         // If the voxel is outside of the world we don't need to do anything with it.
         if (!IsVoxelInWorld(pos))
             return;
+
 
         // Find out the ChunkCoord value of our voxel's chunk.
         int x = Mathf.FloorToInt(pos.x / VoxelData.ChunkWidth);
         int z = Mathf.FloorToInt(pos.z / VoxelData.ChunkWidth);
 
+        //Debug.Log("SetVoxel needs RequestChunk @ " + x+", "+ z);
+
+        // Check if the chunk exists. If not, create it.
+        ChunkData chunk = RequestChunk(new ChunkCoord(x, z), true, false);
+        
+        if(chunk==null) return;
         // Then reverse that to get the position of the chunk.
         x *= VoxelData.ChunkWidth;
         z *= VoxelData.ChunkWidth;
 
-        // Check if the chunk exists. If not, create it.
-        ChunkData chunk = RequestChunk(new Vector2Int(x, z), true);
-        
         // Then create a Vector3Int with the position of our voxel *within* the chunk.
-        Vector3Int voxel = new Vector3Int((int)(pos.x - x), (int)pos.y, (int)(pos.z - z));
+        //Vector3Int voxel = new Vector3Int((int)(pos.x - x), (int)pos.y, (int)(pos.z - z));
         //Debug.Log(string.Format("{0}, {1}, {2}", voxel.x, voxel.y, voxel.z));
-        // Then set the voxel in our chunk.
+        // Then get the voxel in our chunk.
 
-        chunk.map[voxel.x, voxel.y, voxel.z].id = value;
+        chunk.map[(int)(pos.x - x), (int)pos.y, (int)(pos.z - z)].id = value;
 
         AddToModifiedChunkList(chunk);
-
     }
 
-    public VoxelState GetVoxel (Vector3 pos) {
-
+    public VoxelState GetVoxel (Vector3 pos, bool load) {
         // If the voxel is outside of the world we don't need to do anything with it.
         if (!IsVoxelInWorld(pos))
             return null;
@@ -124,19 +163,19 @@ public class WorldData {
         int x = Mathf.FloorToInt(pos.x / VoxelData.ChunkWidth);
         int z = Mathf.FloorToInt(pos.z / VoxelData.ChunkWidth);
 
+
+        // Check if the chunk exists. If not, create it.
+        ChunkData chunk = RequestChunk(new ChunkCoord(x, z), load, false);
+        
         // Then reverse that to get the position of the chunk.
         x *= VoxelData.ChunkWidth;
         z *= VoxelData.ChunkWidth;
 
-        // Check if the chunk exists. If not, create it.
-        ChunkData chunk = RequestChunk(new Vector2Int(x, z), true);
-
         // Then create a Vector3Int with the position of our voxel *within* the chunk.
-        Vector3Int voxel = new Vector3Int((int)(pos.x - x), (int)pos.y, (int)(pos.z - z));
+        //Vector3Int voxel = new Vector3Int();
 
-        // Then set the voxel in our chunk.
-        return chunk.map[voxel.x, voxel.y, voxel.z];
-
+        // Then get the voxel in our chunk.
+        if(chunk==null) return null;
+        return chunk.map[(int)(pos.x - x), (int)pos.y, (int)(pos.z - z)];
     }
-
 }

@@ -4,7 +4,6 @@ using UnityEngine;
 
 [CreateAssetMenu(fileName = "BiomeAttributes", menuName = "MinecraftTutorial/Biome Attribute")]
 public class BiomeAttributes : ScriptableObject {
-
     [Header("Major Flora")]
     public string biomeName;
     public int offset;
@@ -31,12 +30,10 @@ public class BiomeAttributes : ScriptableObject {
 
 
     public Lode[] lodes;
-
 }
 
 [System.Serializable]
 public class Lode {
-
     public string nodeName;
     public byte blockID;
     public int minHeight;
@@ -44,6 +41,4 @@ public class Lode {
     public float scale;
     public float threshold;
     public float noiseOffset;
-
-
 }
